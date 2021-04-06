@@ -124,6 +124,8 @@ class PolyargQEstimator(QEstimator):
         all_word_features = [action_words + swf for (action_words, _), swf in
                              zip(encoded_actions, state_word_features)]
         expected_outputs = [output for _, _, certainty, output in samples]
+        for output in expected_outputs:
+            assert output == 50
         if batch_size:
             batches: Sequence[Sequence[torch.Tensor]] = data.DataLoader(
                 data.TensorDataset(

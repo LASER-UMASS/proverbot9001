@@ -31,6 +31,8 @@ import torch
 import torch.nn as nn
 import torch.utils.data as data
 from torch import optim
+from torch import autograd
+import torch.optim.lr_scheduler as scheduler
 import argparse
 import sys
 from pathlib_revised import Path2
@@ -47,12 +49,14 @@ class FeaturesQEstimator(QEstimator):
             -> None:
         self._num_tactics = 32
         self._num_tokens = 128
-        self.model = FeaturesQModel(self._num_tactics, self._num_tokens,
-                                    3, 128, 2)
+        # self.model = FeaturesQModel(self._num_tactics, self._num_tokens,
+        #                             3, 128, 2)
         # self.model = SimplifiedQModel(self._num_tactics, 4, 2)
+        self.model = CertaintyQModel()
         self.optimizer = optim.SGD(self.model.parameters(), learning_rate)
-        # self.adjuster = scheduler.StepLR(self.optimizer, batch_step,
-        #                                  gamma=gamma)
+        eprint(f"Batch step is {batch_step}")
+        self.adjuster = scheduler.StepLR(self.optimizer, batch_step,
+                                         gamma=gamma)
         self.criterion = nn.MSELoss()
         self.tactic_map: Dict[str, int] = {}
         self.token_map: Dict[str, int] = {}
@@ -69,8 +73,9 @@ class FeaturesQEstimator(QEstimator):
                                    zip(encoded_actions_batch,
                                        state_word_features_batch)]
         with torch.no_grad():
-            output = self.model(torch.LongTensor(all_word_features_batch),
-                                torch.FloatTensor(vec_features_batch))
+            # output = self.model(torch.LongTensor(all_word_features_batch),
+            #                     torch.FloatTensor(vec_features_batch))
+            output = self.model(torch.FloatTensor(vec_features_batch[:,2]))
         for item in output:
             assert item == item, (all_word_features_batch, vec_features_batch)
         return list(output)
@@ -90,7 +95,7 @@ class FeaturesQEstimator(QEstimator):
                              zip(encoded_actions, state_word_features)]
         expected_outputs = [output for _, _, certainty, output in samples]
         if batch_size:
-            batches: Iterable[Sequence[torch.Tensor]] = data.DataLoader(
+            batches: Sequence[Sequence[torch.Tensor]] = data.DataLoader(
                 data.TensorDataset(
                     torch.LongTensor(all_word_features),
                     torch.FloatTensor(vec_features),
@@ -104,20 +109,29 @@ class FeaturesQEstimator(QEstimator):
                         torch.FloatTensor(vec_features),
                         torch.FloatTensor(expected_outputs)]]
         for epoch in range(0, num_epochs):
+            epoch_loss = 0.
             for idx, batch in enumerate(batches):
                 self.optimizer.zero_grad()
                 word_features_batch, vec_features_batch, \
                     expected_outputs_batch = batch
                 outputs = self.model(word_features_batch,
                                      vec_features_batch)
+                eprint(f"Certainties are {vec_features_batch[:,2] * 50}")
+                eprint(f"Expected outputs are {expected_outputs_batch}")
+                eprint(f"Outputs are {outputs.data}")
                 loss = self.criterion(
                     outputs, maybe_cuda(expected_outputs_batch))
-
-                eprint(loss.data,
-                       guard=show_loss and epoch % 10 == 9
-                       and idx == len(batches) - 1)
                 loss.backward()
                 self.optimizer.step()
+                self.adjuster.step()
+                epoch_loss += loss.item()
+                eprint(epoch_loss / len(batches),
+                       guard=show_loss and epoch % 10 == 0
+                       and idx == len(batches) - 1)
+                eprint("Learning rate {:.12f}".format(
+                    self.optimizer.param_groups[0]['lr']),
+                       guard=show_loss and epoch % 10 == 0
+                       and idx == len(batches) - 1)
 
     def _features(self, context: TacticContext, certainty: float) \
             -> Tuple[List[int], List[float]]:
@@ -209,6 +223,14 @@ class SimplifiedQModel(nn.Module):
         self.dnn.print_weights()
 
 
+class CertaintyQModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, certainties_batch: torch.FloatTensor):
+        return certainties_batch * 50
+
+
 class FeaturesQModel(nn.Module):
     def __init__(self,
                  num_tactics: int,
@@ -217,6 +239,8 @@ class FeaturesQModel(nn.Module):
                  hidden_size: int,
                  num_layers: int) -> None:
         super().__init__()
+        self.vec_features_size = vec_features_size
+        self.hidden_size = hidden_size
         # Consider making the word embedding the same for all
         # token-type inputs, also for tactic-type inputs
         self._word_features_encoder = maybe_cuda(
@@ -230,10 +254,18 @@ class FeaturesQModel(nn.Module):
     def forward(self,
                 word_features_batch: torch.LongTensor,
                 vec_features_batch: torch.FloatTensor) -> torch.FloatTensor:
+        batch_size = vec_features_batch.size()[0]
+        assert word_features_batch.size()[0] == batch_size
         encoded_word_features = self._word_features_encoder(
             maybe_cuda(word_features_batch))
-        scores = self._features_classifier(
-            torch.cat((encoded_word_features, maybe_cuda(vec_features_batch)),
-                      dim=1))\
-                     .view(vec_features_batch.size()[0])
+        assert encoded_word_features.size() == \
+            torch.Size([batch_size, self.hidden_size])
+        inputs = torch.cat((encoded_word_features,
+                            maybe_cuda(vec_features_batch)),
+                           dim=1)
+        assert inputs.size() == torch.Size([batch_size,
+                                            self.hidden_size +
+                                            self.vec_features_size])
+        scores = self._features_classifier(inputs)\
+                     .view(batch_size)
         return scores

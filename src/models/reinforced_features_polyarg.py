@@ -29,7 +29,7 @@ from models import (features_polyarg_predictor, q_estimator,
                     features_q_estimator, polyarg_q_estimator)
 from coq_serapy.contexts import TacticContext
 
-# from util import eprint
+from util import eprint
 
 PickleableFPAMetadata = Any
 
@@ -88,6 +88,13 @@ class ReinforcedFeaturesPolyargPredictor(TacticPredictor):
             [(in_data, prediction.prediction, prediction.certainty)
              for prediction in inner_predictions]),
                         inner_predictions))
+        if len(in_data.prev_tactics):
+            for score, prediction in q_choices:
+                if prediction.prediction == "intros.":
+                    eprint(f"Gave context {in_data}, "
+                           f"action {prediction.prediction}, "
+                           f"and certainty {prediction.certainty}, "
+                           f"score {score}")
         # eprint("Scored predictions:")
         # for score, prediction in q_choices:
         #     eprint(f"{prediction.prediction}: {score}")

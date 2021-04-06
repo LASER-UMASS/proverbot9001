@@ -183,6 +183,10 @@ class ReinforceGraph:
             if child.action == transition.action:
                 assert child.reward == transition.reward
                 child.transition = transition
+                # if len(transition.prev_tactics) == 1 and \
+                #         transition.action == "intros.":
+                #     eprint(f"Hit a starting intros with certainty "
+                #            f"{transition.original_certainty}")
                 return child
         return self.mkNode(transition, src, **kwargs)
 
@@ -277,6 +281,12 @@ class ReinforceGraph:
             score = estimator([(ctxt,
                                 node.transition.action,
                                 node.transition.original_certainty)])[0]
+            if len(node.transition.prev_tactics) == 1 and \
+                    node.transition.action == "intros.":
+                eprint(f"Gave context {ctxt}, "
+                       f"action {node.transition.action}, "
+                       f"and certainty {node.transition.original_certainty}, "
+                       f"score {score}")
             self.setNodeApproxQScore(
                 node, score)
         for child in node.children:
@@ -395,7 +405,7 @@ def reinforce_multithreaded(args: argparse.Namespace) -> None:
                                         predictor)
     else:
         q_estimator = FeaturesQEstimator(args.learning_rate,
-                                         args.batch_size,
+                                         args.batch_step,
                                          args.gamma)
     # This sets up a handler so that if the user hits Ctrl-C, we save
     # the weights as we have them and exit.
@@ -979,6 +989,7 @@ def assign_reward(args: argparse.Namespace,
       -> LabeledTransition:
     # goals_changed = len(after.all_goals) - len(before.all_goals)
     if len(after.all_goals) == 0:
+        # eprint("Assigning QED reward")
         reward = 50.0
     # elif goals_changed != 0:
     #     if goals_changed > 0:
@@ -1044,7 +1055,10 @@ def assign_scores(args: argparse.Namespace,
                                                   args.max_term_length)
 
             if len(transition.after.all_goals) == 0:
-                new_q = transition.reward
+                # eprint(f"Assigning QED score {transition.reward} "
+                #        f"to action {transition.action}")
+                new_q = 50.0
+                # new_q = transition.reward
             else:
                 estimates = q_estimator(
                     [(tactic_ctxt, prediction.prediction, prediction.certainty)
@@ -1052,6 +1066,7 @@ def assign_scores(args: argparse.Namespace,
                 estimated_future_q = \
                     args.time_discount * max(estimates)
                 new_q = transition.reward + estimated_future_q
+                # new_q = 50.0
 
             yield TacticContext(
                 transition.relevant_lemmas,
@@ -1088,7 +1103,7 @@ def pre_train(args: argparse.Namespace,
 
             random_certainty = random.random()
             yield (context, transition.tactic,
-                   random_certainty, random_certainty)
+                   random_certainty, random_certainty * 50)
 
     samples = list(gen_samples())
     estimator.train(samples, args.batch_size,
