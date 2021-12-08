@@ -991,6 +991,15 @@ def attempt_search(args: argparse.Namespace,
                                          coq,
                                          args, bar_idx, predictor,
                                          predictor_lock)
+    if args.relevant_lemmas == "local":
+        relevant_lemmas = coq.local_lemmas[:-1] + env_lemmas
+    elif args.relevant_lemmas == "hammer":
+        relevant_lemmas = coq.get_hammer_premises() + env_lemmas
+    elif args.relevant_lemmas == "searchabout":
+        relevant_lemmas = coq.get_lemmas_about_head() + env_lemmas
+    else:
+        assert False, args.relevant_lemmas
+
     return result
 
 
@@ -1286,7 +1295,7 @@ class TqdmSpy(tqdm):
 
 def dfs_proof_search_with_graph(lemma_statement: str,
                                 module_name: Optional[str],
-                                extra_env_lemmas: List[str],
+                                relevant_lemmas: List[str],
                                 coq: serapi_instance.SerapiInstance,
                                 args: argparse.Namespace,
                                 bar_idx: int,
@@ -1297,15 +1306,6 @@ def dfs_proof_search_with_graph(lemma_statement: str,
     unnamed_goal_number = 0
     lemma_name = serapi_instance.lemma_name_from_statement(lemma_statement)
     g = SearchGraph(lemma_name)
-
-    if args.relevant_lemmas == "local":
-        relevant_lemmas = coq.local_lemmas[:-1] + extra_env_lemmas
-    elif args.relevant_lemmas == "hammer":
-        relevant_lemmas = coq.get_hammer_premises() + extra_env_lemmas
-    elif args.relevant_lemmas == "searchabout":
-        relevant_lemmas = coq.get_lemmas_about_head() + extra_env_lemmas
-    else:
-        assert False, args.relevant_lemmas
 
     def cleanupSearch(num_stmts: int, msg: Optional[str] = None):
         if msg:
