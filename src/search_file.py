@@ -1634,6 +1634,7 @@ def bfs_beam_proof_search(lemma_statement: str,
         subgoals_stack_start = [0]
     else:
         subgoals_stack_start = []
+    initial_history_len = len(coq.tactic_history.getFullHistory())
     start_node = BFSNode(Prediction(lemma_name, 1.0), 1.0, 0.0,
                          FullContext([], [],
                                      ProofContext([], [], [], [])), None)
@@ -1643,7 +1644,7 @@ def bfs_beam_proof_search(lemma_statement: str,
         next_nodes_todo: List[Tuple[BFSNode, List[int], int]] = []
         for next_node, subgoal_distance_stack, extra_depth in nodes_todo:
             # Return to the beginning of the proof
-            while len(coq.prev_tactics) > 1:
+            while len(coq.tactic_history.getFullHistory()) > initial_history_len:
                 coq.cancel_last()
             for command in node_commands(next_node)[1:]:
                 coq.run_stmt(command)
