@@ -230,6 +230,7 @@ def parse_arguments(args_list: List[str]) -> Tuple[argparse.Namespace,
                         choices=['local', 'hammer', 'searchabout'],
                         default='local')
     parser.add_argument("--command-limit", type=int, default=None)
+    parser.add_argument("--search-type", choices=['dfs', 'beam-bfs'])
     proofsGroup = parser.add_mutually_exclusive_group()
     proofsGroup.add_argument("--proof", default=None)
     proofsGroup.add_argument("--proofs-file", default=None)
@@ -998,15 +999,17 @@ def attempt_search(args: argparse.Namespace,
     else:
         assert False, args.relevant_lemmas
 
-    result = bfs_beam_proof_search(lemma_statement, module_name,
-                                   relevant_lemmas, coq,
-                                   args, bar_idx, predictor,
-                                   predictor_lock)
-    # result = dfs_proof_search_with_graph(lemma_statement, module_name,
-    #                                      relevant_lemmas,
-    #                                      coq,
-    #                                      args, bar_idx, predictor,
-    #                                      predictor_lock)
+    if args.search_type == 'dfs':
+        result = dfs_proof_search_with_graph(lemma_statement, module_name,
+                                             relevant_lemmas,
+                                             coq,
+                                             args, bar_idx, predictor,
+                                             predictor_lock)
+    elif args.search_type == 'beam-bfs':
+        result = bfs_beam_proof_search(lemma_statement, module_name,
+                                       relevant_lemmas, coq,
+                                       args, bar_idx, predictor,
+                                       predictor_lock)
     return result
 
 
