@@ -589,6 +589,16 @@ def search_file_multithreaded(args: argparse.Namespace,
                                 lemma_statements_todo.remove((module_prefix,
                                                               done_lemma_stmt))
                             except ValueError:
+                                done_name = serapi_instance.lemma_name_from_statement(done_lemma_stmt)
+                                for todo_module_prefix, todo_lemma_statement in lemma_statements_todo:
+                                    todo_name = serapi_instance.lemma_name_from_statement(todo_lemma_statement)
+                                    if todo_name == done_name:
+                                        eprint(f"similar lemma is {(module_prefix, lemma_statement)}")
+                                        if module_prefix != todo_module_prefix:
+                                            eprint(f"But module prefixes don't match ({module_prefix} != {todo_module_prefix})")
+                                        if done_lemma_stmt != todo_lemma_statement :
+                                            eprint(f"But statements don't match ({done_lemma_stmt} != {todo_lemma_statement})")
+                                eprint(lemma_statements_todo)
                                 eprint(f"filename: {filename}, "
                                        f"module_prefix: {module_prefix}, "
                                        f"done_lemma_stmt: {done_lemma_stmt}")
