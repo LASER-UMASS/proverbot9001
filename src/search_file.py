@@ -60,6 +60,8 @@ from pathlib_revised import Path2
 from enum import Enum
 import pygraphviz as pgv
 import torch
+
+from value_estimator import Estimator
 Tag = Callable[..., Doc.Tag]
 Text = Callable[..., None]
 Line = Callable[..., None]
@@ -242,6 +244,7 @@ def parse_arguments(args_list: List[str]) -> Tuple[argparse.Namespace,
     parser.add_argument("--add-axioms", type=Path2, default=None)
     parser.add_argument("--tactics-file", type=Path2, default=Path2("tactics.txt"))
     parser.add_argument("--tokens-file", type=Path2, default=Path2("tokens.txt"))
+    parser.add_argument("--beta-file", type=Path2, default=Path2("beta.txt"))
     if __name__ == "__main__":
         known_args = parser.parse_args(args_list)
     else:
@@ -1628,6 +1631,7 @@ def bfs_beam_proof_search(lemma_statement: str,
                      f"{lemma_name}.svg"
 
     features_extractor = FeaturesExtractor(args.tactics_file, args.tokens_file)
+    state_estimator = Estimator(args.beta_file)
 
     if coq.count_fg_goals() > 1:
         coq.run_stmt("{")
@@ -1674,9 +1678,17 @@ def bfs_beam_proof_search(lemma_statement: str,
                 postfix += ["}"] * subgoals_closed
                 postfix += ["{"] * subgoals_opened
 
+
+                # state_score = next_node.score * prediction.certainty
+                state_score = state_estimator.estimateVal(
+                                  features_extractor.state_features(
+                                      TacticContext(full_context_before.relevant_lemmas,
+                                                    full_context_before.prev_tactics,
+                                                    context_after.focused_hyps,
+                                                    context_after.focused_goal)))
                 prediction_node = BFSNode(
                     prediction,
-                    next_node.score * prediction.certainty,
+                    state_score,
                     time_taken, postfix, full_context_before, next_node)
                 if error:
                     if args.count_failing_predictions:
